@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="fr">
+	<head>
+		<title>Jeu 2048</title>
+		<meta charset="utf-8">
+        <style>
+            /* html { font-size: 62.5%; } */
+/* body { margin: 0px; padding: 0px; color : black} */
+
+.header2048 {
+    color: lightgray;
+    font-size: 150%;
+}
+
+#uiInformation {
+	margin: 0 auto;
+	position: relative;
+}
+
+#game_zone {
+	background-color: #b0b0b0;
+	margin: 0 auto;
+	border: 5px solid #b0b0b0;
+	border-radius: 7px;
+	position: relative;
+}
+
+#commande {
+	margin:0px;
+	height:30px;
+	position: absolute;
+	left : 410px;
+	top: 0px;
+}
+
+.absoluteElement {
+	position: absolute;
+}
+
+.customButton {
+	background: #a33535;
+	color: white;
+	border: 0;
+	padding: 5px 15px;
+	border-radius: 5px;
+	transition: background 250ms;
+}
+
+.customButton:hover {
+	background: #1c1b20;
+}
+
+#restartButton {
+	z-index:1;
+	position: absolute;
+}
+
+.backgroundGrid {
+	border-style:solid;
+	border-width:2px;
+	border-color:rgb(107, 153, 196);
+	background-color:rgb(154, 192, 228);
+	margin: 0px;
+	padding: 0px;
+	width: 95px;
+	height: 95px;
+	position: absolute;
+	border-radius: 7px;
+}
+
+.case {
+	border-style:solid;
+	border-width:2px;
+	border-color:rgb(41, 43, 12);
+	margin: 0px;
+	padding: 0px;
+	width: 95px;
+	height: 95px;
+	line-height: 95px;
+	position: absolute;
+	z-index:1;
+	transition-property : top, left;
+	transition-duration : 0.35s;
+	text-align: center;
+	font-size: 4rem;
+	border-radius: 7px;
+    font-size: 250%;
+}
+
+.newCase {
+	background-color : rgb(236, 124, 124) !important;
+}
+        </style>
+		<script type="text/javascript">
+
+            let grid;
+            let caseHeight = 102;
+            let inGame;
+            let isWin = false;
+
+            let size = 4; //default size
+
+            let uiInformation;
+            let textZone;
+            let autoPlayButtonText = "AutoPlay";
+            let changeSizeButton;
+            let changeSizeText;
+            let confirm = "Confirm";
+
+            let scoreValue = 0;
+            let scoreZone;
+            let scoreText = "SCORE : ";
+            let bestScoreValue = 0;
+            let bestScoreZone;
+            let bestScoreText = "BEST SCORE : ";
+
+            /* #region autoPlay attribute */
+            let interval;
+            let autoPlay;
+            let autoPlayButton;
+            /* #endregion autoPlay attribute */
+
+            /**
+             * First function who are automatically call by the HTML
+             */
+            function init() {
+                document.onkeydown = function (event) { keyAction(event); };
+                setupHTML();
+                newGame();
+            }
+
+            /* #region button */
+            /**
+             * Function who setup every HTML element who are necessary to have User Interface to Play at 2048
+             */
+            function setupHTML() {
+                autoPlay = false;
+                autoPlayButton = document.createElement("button");
+                autoPlayButton.classList = "absoluteElement customButton";
+                autoPlayButton.innerHTML = autoPlayButtonText;
+                autoPlayButton.onclick = function () { switchAutoPlayStatus(); };
+
+                textZone = document.createElement("input");
+                textZone.size = 1
+                textZone.classList = "absoluteElement";
+                textZone.setAttribute("value", size);
+
+                changeSizeText = document.createElement("h1")
+                changeSizeText.classList = "absoluteElement header2048";
+                changeSizeText.innerHTML = "Size :"
+
+                changeSizeButton = document.createElement("button");
+                changeSizeButton.classList = "absoluteElement customButton";
+                changeSizeButton.innerHTML = confirm;
+                changeSizeButton.onclick = function () {
+                    newGame();
+                };
+
+                scoreZone = document.createElement("h1");
+                scoreZone.classList = "header2048";
+                scoreZone.id = "score";
+                scoreZone.innerHTML = scoreText + scoreValue;
+
+                bestScoreZone = document.createElement("h1");
+                bestScoreZone.classList = "header2048";
+                bestScoreZone.id = "bestScore";
+                bestScoreValue = getCookie("bestScore");
+                bestScoreZone.innerHTML = (bestScoreValue == false ? bestScoreText + 0 : bestScoreText + bestScoreValue);
+
+                // to add every element in html
+                let game = document.querySelector("#game_zone");
+                let areaToDisplay = game.parentNode;
+
+                uiInformation = document.createElement("div");
+                uiInformation.id = "uiInformation";
+
+                uiInformation.appendChild(autoPlayButton);
+                uiInformation.appendChild(textZone);
+                uiInformation.appendChild(changeSizeText);
+                uiInformation.appendChild(changeSizeButton);
+                uiInformation.appendChild(scoreZone);
+                uiInformation.appendChild(bestScoreZone);
+
+                areaToDisplay.insertBefore(uiInformation, game);
+            }
+
+            /**
+            * Function who position the element in HTML page taking into account the size of the grid
+            */
+            function computeStyle() {
+                uiInformation.style.width = (grid.height * caseHeight) + 30 + "px";
+                autoPlayButton.style = "left:" + (((grid.height * caseHeight) / 8) * 7) + "px;";
+                changeSizeText.style = "top: 20px; left:" + (((grid.height * caseHeight) / 10) * 7) + "px;";
+                textZone.style = "top: 40px; left:" + (((grid.height * caseHeight) / 8) * 7) + "px;";
+                changeSizeButton.style = "top: 40px; left:" + (grid.height * caseHeight)  + "px;";
+            }
+            /* #endregion button*/
+
+            /**
+            * Function who add or remove the auto player
+            */
+            function switchAutoPlayStatus() {
+                autoPlay = !autoPlay;
+                if (autoPlay) {
+                    interval = setInterval(function () {
+                        if (inGame) {
+                            let rdm = Math.random();
+                            if (rdm < 0.25)
+                                moveArraytoDirection("column", "top");
+                            else if (rdm < 0.5)
+                                moveArraytoDirection("line", "right");
+                            else if (rdm < 0.75)
+                                moveArraytoDirection("line", "left");
+                            else
+                                moveArraytoDirection("column", "bottom");
+                        }
+                        else { // when game is finish, we stop autoPlayer
+                            switchAutoPlayStatus();
+                        }
+
+                    }, 1); // each 1 ms, we execute bellow code
+                }
+                else {
+                    clearInterval(interval);
+                }
+            }
+
+            /**
+            * Return the value of the cookie with key keyName
+            * @param {string} keyName the key of the cookie
+            * @returns return cookie value if his found and false if cookie key isn't found
+            */
+            function getCookie(keyName) {
+                keyName += "=";
+                let attributes = document.cookie.split(';');
+                for (let i = 0; i < attributes.length; i++) {
+                    let attribute = attributes[i];
+
+                    while (attribute.charAt(0) == ' ') { // to remove space
+                        attribute = attribute.substring(1);
+                    }
+
+                    if (attribute.indexOf(keyName) == 0) { // if key correspond to keyName
+                        return attribute.substring(keyName.length, attribute.length); // return value
+                    }
+                }
+                return false;
+            }
+
+            /* #region listener and moveFunction */
+            let prevInput = 0;
+
+            /**
+            * Function who setup the listener to play at 2048
+            * Particullary to move element with arrow and and zqsd
+            * @param {*} event the event of the key pressed
+            */
+            function keyAction(event) {
+                if (inGame && Date.now() - prevInput > 150) { // if we aren't in game, we don't want move element and we let a delay between input of 500
+                    prevInput = Date.now();
+                    let key = event.key;
+                    switch (key) {
+                        case "z":
+                        case "ArrowUp":
+                            // up
+                            moveArraytoDirection("column", "top");
+                            break;
+
+                        case "s":
+                        case "ArrowDown":
+                            // down
+                            moveArraytoDirection("column", "bottom");
+                            break;
+
+                        case "q":
+                        case "ArrowLeft":
+                            // left
+                            moveArraytoDirection("line", "left");
+                            break;
+
+                        case "d":
+                        case "ArrowRight":
+                            // right
+                            moveArraytoDirection("line", "right");
+                            break;
+                    }
+                }
+            }
+
+            /**
+            * Function who calculate movement, fusion and refill with a new case after that
+            * @param {Array} array the cases to compute
+            * @param {String} direction the direction of the compute
+            */
+            function moveArraytoDirection(array, direction) {
+                let canGenerateNew = false;
+                for (let i = 0; i < grid.getGridLength(); i++) { // for all grid
+                    let oneCaseMove = grid.stack(getColumnOrLine(array, i), direction); // we stack a fisrt time
+                    let twoCaseFuse = grid.fuse(getColumnOrLine(array, i), direction); // we try to fuse
+
+                    if (oneCaseMove || twoCaseFuse) { // if we have a mouvement or a fusion, we can generate a new case, on other case, the rule indicate the rules indicate that we can't have a new case
+                        canGenerateNew = true;
+                    }
+                    if (twoCaseFuse) { // if we have a fusion, we need to restack to fill the emptyCase who are created by fusion
+                        grid.stack(getColumnOrLine(array, i), direction);
+                    }
+                }
+
+                if (canGenerateNew) { // if we have a mouvement or a fusion we can create a new case
+                    grid.fillRandomCase();
+                    // we check if the player can play after the generation of new case
+                    if (!grid.checkCanPlay()) { // fuse is imposible and mouv
+                        endGame();
+                    }
+                }
+                else { // if we doesn't have movement or fusion
+                    if (!grid.checkCanPlay()) { // fuse is imposible and mouv
+                        endGame();
+                    }
+                }
+            }
+
+            /**
+            * Function who returns the column or line of the i number
+            * @param {String} string string content the chain "column" or "line"
+            * @param {number} i number of the colum or line, need to be inferiour to the grid length
+            * @returns An array of the different cases on the comuln or line i
+            */
+            function getColumnOrLine(string, i) {
+                if (string == "column") {
+                    return grid.getColumn(i);
+                }
+                else {
+                    return grid.getLine(i);
+                }
+            }
+            /* #endregion listener and moveFunction */
+
+            /**
+            * Function who return a number between 2 and 4 with a probability of 0.9 for 2
+            * @returns a number between 2 and 4
+            */
+            function getRandomValue() {
+                let rdm = Math.random();
+                return rdm <= 0.9 ? 2 : 4; //0.9 it's probability, 2 is if good, 4 if isn't good
+            }
+
+            /* #region gameState */
+            /**
+            * Function to call to init a game
+            * They create a new grid
+            */
+            function newGame() {
+                let endGameElement = document.getElementById("endGame");
+                if (endGameElement != null) {
+                    endGameElement.remove();
+                }
+
+                // To reset score
+                scoreValue = 0;
+                scoreZone.innerHTML = scoreText + scoreValue;
+
+                sizeInTextZone = textZone.value;
+                let sizeForGrid = size;
+                if (sizeInTextZone >= 3 && sizeInTextZone <= 10) {
+                    sizeForGrid = sizeInTextZone;
+                }
+                else {
+                    textZone.value = size
+                }
+
+                generateGrid(sizeForGrid);
+                computeStyle();
+                inGame = true;
+            }
+
+            /**
+            * Function to call to alert the player who reach 2048
+            */
+            function winGame() {
+                if (!isWin) {
+                    alert("You reach 2048 !!! Congratulations !");
+                    isWin = true;
+                }
+            }
+
+            /**
+            * Function who generate grid
+            * @param {number} value height of grid
+            */
+            function generateGrid(value) {
+                if (grid != null) {
+                    grid.removeAll();
+                }
+                grid = new Grid(value);
+                grid.fillRandomCase();
+                grid.fillRandomCase();
+            }
+
+            /**
+            * Function to call to close a game
+            */
+            function endGame() {
+                inGame = false;
+                let divEndGame = document.createElement("div");
+                divEndGame.id = "endGame";
+
+                let restartButton = document.createElement("button");
+                restartButton.id = "restartButton";
+                restartButton.classList = "customButton";
+                restartButton.onclick = function () {
+                    newGame(); // To recreate a new Game
+                };
+                restartButton.innerHTML = "Restart";
+
+                let center = (grid.height * caseHeight) / 2;
+                restartButton.style = "top:" + (center - 10) + "px; left:" + (center - 35) + "px;";
+                divEndGame.appendChild(restartButton);
+
+                if (bestScoreValue < scoreValue) {
+                    saveScore();
+                }
+
+                let areaToDisplay = document.querySelector("#game_zone");
+                areaToDisplay.appendChild(divEndGame);
+            }
+
+            function saveScore() {
+                bestScoreValue = scoreValue;
+                bestScoreZone.innerHTML = bestScoreText + bestScoreValue;
+                document.cookie = "bestScore=" + bestScoreValue; // to save in cookie
+            }
+            /* #endregion gameState */
+
+            /**
+            * Class content Model and Vue of the Grid
+            * @class Grid
+            * @constructor
+            */
+            class Grid {
+
+                /**
+                * Creates an instance of Grid.
+                * @param {number} height
+                * @memberof Grid
+                */
+                constructor(height) {
+                    this.EMPTY_CASE = null; // constante to refer an emptyCase
+                    this.id = 0;
+                    this.height = height;
+                    this.generateGrid(height);
+                    this.display();
+                }
+
+                /**
+                * Generate a grid of height and start game
+                * @param {number} height
+                * @memberof Grid
+                */
+                generateGrid(height) {
+                    this.grid = [];
+                    for (let i = 0; i < height; i++) {
+                        this.grid[i] = [];
+                        for (let j = 0; j < height; j++) {
+                            this.grid[i][j] = this.EMPTY_CASE;
+                        }
+                    }
+                    inGame = true;
+                }
+
+                /* #region Display */
+                /**
+                * Make graphics of the background grid
+                * @memberof Grid
+                */
+                display() {
+                    let areaToDisplay = document.querySelector("#game_zone");
+                    for (let i = 0; i < this.grid.length; i++) {
+                        let column = document.createElement("div");
+                        column.classList = "column";
+                        for (let j = 0; j < this.grid[i].length; j++) {
+                            column.appendChild(this.displayBackground(i, j));
+                        }
+                        areaToDisplay.appendChild(column);
+                    }
+                    areaToDisplay.style.width = this.height * caseHeight + "px";
+                    areaToDisplay.style.height = this.height * caseHeight + "px";
+                }
+
+                /**
+                * Add the display of the case
+                * @param {GridCase} myCase the gridCase to display
+                * @memberof Grid
+                */
+                displayElement(myCase) {
+                    let areaToDisplay = document.querySelector("#game_zone");
+                    areaToDisplay.appendChild(myCase.getCaseDisplay());
+                }
+
+
+                /**
+                * Print element in console
+                */
+                displayConsoleGrid() { // debug function
+                    console.log("------------------------ DISPLAY GRID ------------------------");
+                    for (let i = 0; i < this.grid.length; i++) {
+                        let tmp = i + " : ";
+                        for (let j = 0; j < this.grid.length; j++) {
+                            if (this.grid[j][i] != null) {
+                                tmp += this.grid[j][i].toString() + ", ";
+                            }
+                            else {
+                                tmp += " null, ";
+                            }
+                        }
+                        console.log(tmp);
+                    }
+                }
+
+                /**
+                * Generate a squarreBacground at position x y
+                * @param {number} x position on x of the squarre
+                * @param {number} y position on x of the squarre
+                * @returns {div} the div of a squarre on the background
+                * @memberof Grid
+                */
+                displayBackground(x, y) {
+                    let div = document.createElement("div");
+                    div.classList = "backgroundGrid";
+                    div.style = "top:" + (y * caseHeight) + "px; left:" + (x * caseHeight) + "px;";
+                    return div;
+                }
+                /* #endregion Display */
+
+                /* #region EmptyCase */
+                /**
+                * Search all the empty case on the Grid
+                * @returns {Array} Array of the empty case
+                * @memberof Grid
+                */
+                getEmptyCase() {
+                    let emptyCases = [];
+                    for (let i = 0; i < this.grid.length; i++) {
+                        for (let j = 0; j < this.grid[i].length; j++) {
+                            if (this.grid[i][j] == this.EMPTY_CASE) {
+                                emptyCases.push(new Point(i, j));
+                            }
+                            else if (this.grid[i][j].isEmpty()) {
+                                emptyCases.push(this.grid[i][j]);
+                            }
+                        }
+                    }
+                    return emptyCases;
+                }
+
+                /**
+                * Get one empty case randomly
+                * @returns {GridCase} one empty case if we don't have an empty case, return null
+                * @memberof Grid
+                */
+                getRandomEmptyCase() {
+                    let emptyCases = this.getEmptyCase();
+                    return emptyCases[Math.floor(Math.random() * emptyCases.length)];
+                }
+                /* #endregion EmptyCase */
+
+                /**
+                * Fill a random case
+                * @memberof Grid
+                */
+                fillRandomCase() {
+                    let lastInsertCase = this.lastCaseInsert;
+                    if (lastInsertCase != this.EMPTY_CASE) {
+                        lastInsertCase.setCaseOld();
+                    }
+                    let emptyCase = this.getRandomEmptyCase();
+                    if (emptyCase != null) { // getRandomEmptyCase() return null if we don't have empty case
+                        if (emptyCase instanceof Point) {
+                            emptyCase = new GridCase(++this.id, getRandomValue(), emptyCase.x, emptyCase.y);
+                            this.grid[emptyCase.x][emptyCase.y] = emptyCase;
+                            emptyCase.setNewCase();
+                        }
+                        else if (emptyCase instanceof GridCase) {
+                            emptyCase.fillCase(getRandomValue());
+                        }
+                        this.lastCaseInsert = emptyCase;
+                        this.displayElement(emptyCase);
+                    }
+                }
+
+                /**
+                * Check if the player can make an action
+                * @returns {boolean} true if player can play and false id he can't
+                * @memberof Grid
+                */
+                checkCanPlay() {
+                    for (let i = 0; i < this.grid.length; i++) {
+                        for (let j = 0; j < this.grid.length; j++) {
+                            if (this.grid[i][j] == this.EMPTY_CASE) { // if the first case is empty, we can play
+                                return true;
+                            }
+                            else {
+                                if (j + 1 < this.grid.length) { // To check the out of range
+                                    if (this.grid[i][j + 1] != this.EMPTY_CASE) {
+                                        if (this.grid[i][j].value == this.grid[i][j + 1].value) { // if 2 neighbours have the same value, we can play
+                                            return true;
+                                        }
+                                    }
+                                }
+                                if (i + 1 < this.grid.length) { // To check the out of range
+                                    if (this.grid[i + 1][j] != this.EMPTY_CASE) {
+                                        if (this.grid[i][j].value == this.grid[i + 1][j].value) { // if 2 neighbours have the same value, we can play
+                                            return true;
+                                        }
+                                    }
+                                }
+                                if (i - 1 >= 0) { // To check the out of range
+                                    if (this.grid[i - 1][j] != this.EMPTY_CASE) {
+                                        if (this.grid[i][j].value == this.grid[i - 1][j].value) { // if 2 neighbours have the same value, we can play
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    return false; // if we don't find any solution, we can't play
+                }
+
+                /**
+                * Stack the array by the direction
+                * This part check if we need to stack, the next part is in stackElement
+                * @param {Array<GridCase>} elements array of gridCase
+                * @param {number} direction direction to stack
+                * @returns {boolean} true if compute a move or false in other case
+                * @memberof Grid
+                */
+                stack(elements, direction) {
+                    if (!elements instanceof Array) {
+                        throw new TypeError('elements must be an array');
+                    }
+
+                    let nbMouvement = 0;
+                    let elementMove = false;
+                    if (direction == "top" || direction == "left") {
+                        for (let i = 0; i < elements.length; i++) {
+                            if (elements[i] == this.EMPTY_CASE) {
+                                nbMouvement++;
+                            }
+                            else if (nbMouvement > 0) { // case isn't empty and we need to make one transition
+                                this.stackElement(elements[i], nbMouvement, direction);
+                                elementMove = true;
+                            }
+                        }
+                    }
+                    else if (direction == "bottom" || direction == "right") {
+                        for (let i = elements.length - 1; i >= 0; i--) {
+                            if (elements[i] == this.EMPTY_CASE) {
+                                nbMouvement++;
+                            }
+                            else if (nbMouvement > 0) { // case isn't empty and we need to make one transition
+                                this.stackElement(elements[i], nbMouvement, direction);
+                                elementMove = true;
+                            }
+                        }
+                    }
+
+                    return elementMove;
+                }
+
+                /**
+                * Next of stack, compute the stack and update graphics
+                * @param {GridCase} element the case to move
+                * @param {number} nb the number of case to move
+                * @param {string} direction the direction to move
+                * @memberof Grid
+                */
+                stackElement(element, nb, direction) {
+                    let x = element.x;
+                    let y = element.y;
+                    switch (direction) {
+                        case "left":
+                            this.grid[x][y] = this.EMPTY_CASE;
+                            this.setCaseToPosition(element, x - nb, y);
+                            break;
+                        case "right":
+                            this.grid[x][y] = this.EMPTY_CASE;
+                            this.setCaseToPosition(element, x + nb, y);
+                            break;
+                        case "top":
+                            this.grid[x][y] = this.EMPTY_CASE;
+                            this.setCaseToPosition(element, x, y - nb);
+                            break;
+                        case "bottom":
+                            this.grid[x][y] = this.EMPTY_CASE;
+                            this.setCaseToPosition(element, x, y + nb);
+                            break;
+                    }
+                }
+
+                /**
+                * This part check if we need to fuse, the next part is in fuseElement
+                * @param {Array<GridCase>} elements array of gridCase
+                * @param {number} direction direction to fuse
+                * @returns {boolean} true if compute a fusion or false in other case
+                * @memberof Grid
+                */
+                fuse(elements, direction) {
+                    let twoElementFuse = false;
+                    if (direction == "top" || direction == "left") {
+                        for (let i = 1; i < elements.length; i++) {
+                            if (elements[i] == this.EMPTY_CASE || elements[i - 1] == this.EMPTY_CASE) {
+                                // impossible to fuse with one emptyCase
+                            }
+                            else if (elements[i].value == elements[i - 1].value) {
+                                elements = this.fuseElement(elements, i - 1, i);
+                                twoElementFuse = true;
+                            }
+                        }
+                    }
+                    else if (direction == "bottom" || direction == "right") {
+                        for (let i = elements.length - 2; i >= 0; i--) {
+                            if (elements[i] == this.EMPTY_CASE || elements[i + 1] == this.EMPTY_CASE) {
+                                // impossible to fuse with one emptyCase
+                            }
+                            else if (elements[i].value == elements[i + 1].value) {
+                                elements = this.fuseElement(elements, i + 1, i);
+                                twoElementFuse = true;
+                            }
+                        }
+                    }
+                    return twoElementFuse;
+                }
+
+                /**
+                * Next of fuse, compute the fusion and update graphics
+                * @param {Array<GridCase>} elements array of gridCase
+                * @param {number} indexToAdd index of element to add
+                * @param {number} indexToDelete index of element to remove
+                * @returns {Array<GridCase>} the elements list update without element fuse
+                * @memberof Grid
+                */
+                fuseElement(elements, indexToAdd, indexToDelete) {
+                    let elementToAdd = elements[indexToAdd];
+                    let elementToDelete = elements[indexToDelete];
+                    elementToAdd.fillCase(elementToAdd.value + elementToDelete.value);
+
+                    scoreValue += elementToAdd.value; //augment global score
+                    scoreZone.innerHTML = scoreText + scoreValue; // to display score
+                    if (elementToAdd.value == 2048) {
+                        winGame();
+                    }
+
+                    document.getElementById(elementToDelete.id).remove();
+                    this.grid[elementToDelete.x][elementToDelete.y] = this.EMPTY_CASE;  // insert emptyCase in grid
+                    elements[indexToDelete] = this.EMPTY_CASE; // insert in array the empty case, it's usefull when we have multiple element with same value
+                    return elements;
+                }
+
+                /**
+                * Use to remove all graphics and compute element
+                * @memberof Grid
+                */
+                removeAll() {
+                    for (let i = 0; i < this.grid.length; i++) {
+                        for (let j = 0; j < this.grid.length; j++) {
+                            if (this.grid[i][j] != this.EMPTY_CASE) {
+                                this.grid[i][j].getCaseDisplay().remove(); // remove each case of the grid
+                            }
+                        }
+                    }
+                    let backgroundsColumn = document.getElementsByClassName("column");
+                    while (backgroundsColumn.length != 0) { // remove each background case
+                        backgroundsColumn[0].remove();
+                    }
+                }
+
+                /**
+                * Place the gridCase at position x and y graphicly and compute
+                * @param {GridCase} element element to move
+                * @param {number} x the x coordinate of point
+                * @param {number} y the y coordinate of point
+                * @memberof Grid
+                */
+                setCaseToPosition(element, x, y) {
+                    this.grid[x][y] = element;
+                    element.setCasePosition(x, y);
+                }
+
+                /**
+                * Return an array of the line y
+                * @param {number} y the y coordinate of the line
+                * @returns {Array<GridCase>} An array of the gridCase at line
+                * @memberof Grid
+                */
+                getLine(y) {
+                    let line = [];
+                    for (let i = 0; i < this.grid.length; i++) {
+                        line.push(this.grid[i][y]);
+                    }
+                    return line;
+                }
+
+                /**
+                * Return an array of the column x
+                * @param {number} x the x coordinate of the column
+                * @returns {Array<GridCase>} An array of the gridCase at column
+                * @memberof Grid
+                */
+                getColumn(x) {
+                    return this.grid[x];
+                }
+
+                /**
+                * Return the length of the grid
+                * @returns {number} return the length of the grid
+                * @memberof Grid
+                */
+                getGridLength() {
+                    return this.grid.length;
+                }
+
+                /**
+                * Return the case at x, y coordinate
+                * @param {number} x the x coordinate
+                * @param {number} y the y coordinate
+                * @returns {GridCase} return the grid case at x, y coordinate
+                * @memberof Grid
+                */
+                getCase(x, y) {
+                    return this.grid[x][y];
+                }
+            }
+
+            /**
+            * Class to have coordinate x and y of a point
+            * @class Point
+            * @constructor
+            */
+            class Point {
+
+                /**
+                * Creates an instance of Point.
+                * @param {number} x the x coordinate of point
+                * @param {number} y the y coordinate of point
+                * @memberof Point
+                */
+                constructor(x, y) {
+                    this.x = x;
+                    this.y = y;
+                }
+
+            }
+
+            /**
+            * Class who implement the principle of the case
+            * @class MyCase
+            * @constructor
+            */
+            class MyCase {
+
+                /**
+                * Creates an instance of MyCase.
+                * @param {number} id unique value to identify case
+                * @param {number} value value of the case
+                * @param {boolean} lastInsert to know it the case is the last insert
+                * @memberof MyCase
+                */
+                constructor(id, value, lastInsert) {
+                    this.id = id; // id is for debugging
+                    this.value = value;
+                    this.lastInsert = lastInsert;
+                }
+
+                /**
+                * Return if a case is empty
+                * @returns {boolean} return true if the case have a value of 0 else return true
+                * @memberof MyCase
+                */
+                isEmpty() {
+                    return this.value == 0 ? true : false;
+                }
+
+                /**
+                * Standard display of a case in console
+                * @returns {string} return a string describe the element
+                * @memberof MyCase
+                */
+                toString() {
+                    return "Case de valeur " + this.value + " et id " + this.id;
+                }
+            }
+
+            /**
+            * Class who implement vue of the Case
+            * @class GridCase
+            * @constructor
+            * @extends {MyCase}
+            */
+            class GridCase extends MyCase { // creation of GridCase to dissociate model of vue
+
+                /**
+                *Creates an instance of GridCase.
+                * @param {number} id unique value to identify case
+                * @param {number} value value of the case
+                * @param {number} x the x coordinate
+                * @param {number} y the y coordinate
+                * @param {boolean} lastInsert to know it the case is the last insert
+                * @memberof GridCase
+                */
+                constructor(id, value, x, y, lastInsert) {
+                    super(id, value, (lastInsert || false)); // if lastInsert isn't write, the default value is false
+                    this.x = x;
+                    this.y = y;
+                    this.color = new Array(236, 190, 152); // to set the default color
+                    this.display();
+                }
+
+                /* #region case state */
+                /**
+                * Set case at old case state
+                * @memberof GridCase
+                */
+                setCaseOld() {
+                    this.squarre.classList = "case";
+                    this.lastInsert = false;
+                }
+
+                /**
+                * Set case at new case state
+                * @memberof GridCase
+                */
+                setNewCase() {
+                    this.squarre.classList = "case newCase";
+                    this.lastInsert = true;
+                }
+                /* #endregion case state */
+
+                /**
+                * Use to fill a grid case with a value
+                * @param {number} value the value of the case
+                * @param {boolean} newElement if the case need to be at state new case
+                * @memberof GridCase
+                */
+                fillCase(value, newElement) {
+                    if (value != 0) {
+                        this.value = value;
+                        this.squarre.textContent = value;
+                    }
+                    let gradientValue = Math.log2(value) * 7;
+                    this.colorText = " background-color: rgb(" + (this.color[0] - gradientValue) + "," + (this.color[1] - gradientValue) + "," + (this.color[2] - gradientValue) + ")";
+                    this.squarre.style = this.squarre.style.cssText + this.colorText;
+                    if (newElement || false) { // if the newElement isn't give on call of the function, it's false
+                        this.setNewCase();
+                    }
+                }
+
+                /**
+                * Place the grid case at coordinate x and y
+                * @param {number} x the x coordinate
+                * @param {number} y the y coordinate
+                * @memberof GridCase
+                */
+                setCasePosition(x, y) {
+                    this.x = x;
+                    this.y = y;
+                    this.squarre.style = "top:" + (y * caseHeight) + "px; left:" + (x * caseHeight) + "px;" + this.colorText;
+                }
+
+                /* #region case display */
+                /**
+                * Return the div of the display of the grid case
+                * @returns {div} return the div of the display of the case
+                * @memberof GridCase
+                */
+                getCaseDisplay() {
+                    if (this.squarre == null) {
+                        this.display();
+                    }
+                    return this.squarre;
+                }
+
+                /**
+                * Create and return the div of grid case
+                * @returns {div} the div to display or false if the grid case doesn't be display
+                * @memberof GridCase
+                */
+                display() {
+                    this.squarre = document.createElement("div");
+                    this.squarre.id = this.id;
+                    this.squarre.classList = "case";
+                    this.squarre.style = "top:" + (this.y * caseHeight) + "px; left:" + (this.x * caseHeight) + "px;" + this.colorText;
+                    this.fillCase(this.value, false);
+                    if (!this.isEmpty()) {
+                        return this.squarre;
+                    }
+                    return false;
+                }
+                /* #endregion case display */
+            }
+
+
+        </script>
+	</head>
+	 <body onload="init();">
+		<div id="game_zone"></div>
+	 </body>
+ </html>
